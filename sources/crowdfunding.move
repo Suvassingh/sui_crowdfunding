@@ -1,96 +1,24 @@
-/*
-/// Module: crowdfunding
-module crowdfunding::crowdfunding;
-*/
+module move_project::coin_transfer {
 
-// For Move coding conventions, see
-// https://docs.sui.io/concepts/sui-move-concepts/conventions
-
-
-module crowdfunding::crowdfunding {
     use sui::transfer;
-    use sui::object::{Self, UID};
-    use sui::tx_context::{TxContext};
-    use sui::event;
+    use sui::coin::{Self, Coin};
+    use sui::sui::SUI;
+    use sui::tx_context::TxContext;
 
-    // Errors
-    const ENotAdmin: u64 = 0;
-    const ECampaignNotFound: u64 = 1;
-
-    // Structs
-    struct AdminCap has key {
-        id: UID
-    }
-
-    struct Campaign has key, store {
-        id: UID,
-        creator: address,
-        goal_amount: u64,
-        raised_amount: u64,
-        description: vector<u8>,
-        is_active: bool
-    }
-
-    // Events
-    struct CampaignCreated has copy, drop {
-        campaign_id: ID,
-        creator: address,
-        goal_amount: u64
-    }
-
-    // Module initialization
-    fun init(ctx: &mut TxContext) {
-        transfer::transfer(
-            AdminCap {
-                id: object::new(ctx)
-            },
-            tx_context::sender(ctx)
-        );
-    }
-
-    // Create a new campaign
-    public entry fun create_campaign(
-        admin_cap: &AdminCap,
-        goal_amount: u64,
-        description: vector<u8>,
+    /// Transfer a specific amount of SUI to recipient.
+    public fun send_sui_amount(
+        mut c: Coin<SUI>, 
+        amount: u64, 
+        recipient: address, 
         ctx: &mut TxContext
     ) {
-        assert!(tx_context::sender(ctx) == object::uid_to_inner(&admin_cap.id), ENotAdmin);
+        // Split the coin into two: one with amount, rest stays with sender
+        let coin_to_send = coin::split(&mut c, amount, ctx);
 
-        let campaign_id = object::new(ctx);
-        let campaign = Campaign {
-            id: campaign_id,
-            creator: tx_context::sender(ctx),
-            goal_amount,
-            raised_amount: 0,
-            description,
-            is_active: true
-        };
+        // Transfer only that portion
+        transfer::public_transfer(coin_to_send, recipient); # Package Id is 0x3927f12e731bb5257c21ecd94e05e43471564cb8774fdf541854b736f833a0e9
 
-        // Emit event
-        event::emit(CampaignCreated {
-            campaign_id: object::uid_to_inner(&campaign_id),
-            creator: tx_context::sender(ctx),
-            goal_amount
-        });
-
-        // Transfer campaign to creator
-        transfer::transfer(campaign, tx_context::sender(ctx));
-    }
-
-    // Get campaign creator
-    public fun get_campaign_creator(campaign: &Campaign): address {
-        campaign.creator
-    }
-
-    // Get campaign details
-    public fun get_campaign_details(campaign: &Campaign): (address, u64, u64, vector<u8>, bool) {
-        (
-            campaign.creator,
-            campaign.goal_amount,
-            campaign.raised_amount,
-            campaign.description,
-            campaign.is_active
-        )
+        // Transfer the leftover coin back to the sender
+        transfer::public_transfer(c, tx_context::sender(ctx));
     }
 }
